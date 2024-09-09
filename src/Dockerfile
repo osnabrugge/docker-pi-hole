@@ -1,41 +1,38 @@
-ARG PIHOLE_BASE
-FROM "${PIHOLE_BASE:-ghcr.io/pi-hole/docker-pi-hole-base:bullseye-slim}"
+# Use Debian 12 as the base image
+FROM debian:12
 
-ARG PIHOLE_DOCKER_TAG
+# Set build arguments
+ARG DEBIAN_VERSION=debian-12
+ARG PIHOLE_DOCKER_TAG=2024.07.0
+
+# Set environment variables
+ENV phpver=php
+
+# Install required packages
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+    lighttpd \
+    php-common \
+    php-cgi \
+    php-sqlite3 \
+    php-xml \
+    php-intl \
+    php-json \
+    dnsutils \
+    idn2 \
+    dns-root-data \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Handle specific Debian version logic
+RUN if [ "$DEBIAN_VERSION" = "buster-slim" ]; then c_rehash; fi
+
+# Set Pi-hole Docker tag
 RUN echo "${PIHOLE_DOCKER_TAG}" > /pihole.docker.tag
 
-ENTRYPOINT [ "/s6-init" ]
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/bin/s6-init"]
 
-COPY s6/debian-root /
-COPY s6/service /usr/local/bin/service
-
-RUN bash -ex install.sh 2>&1 && \
-    rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
-
-ARG PHP_ERROR_LOG
-ENV PHP_ERROR_LOG /var/log/lighttpd/error-pihole.log
-
-# Add PADD to the container, too.
-ADD https://install.padd.sh /usr/local/bin/padd
-RUN chmod +x /usr/local/bin/padd
-
-# IPv6 disable flag for networks/devices that do not support it
-ENV IPv6 True
-
-EXPOSE 53 53/udp
-EXPOSE 67/udp
-EXPOSE 80
-
-ENV S6_KEEP_ENV 1
-ENV S6_BEHAVIOUR_IF_STAGE2_FAILS 2
-ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME 0
-
-ENV FTLCONF_LOCAL_IPV4 0.0.0.0
-ENV FTL_CMD no-daemon
-ENV DNSMASQ_USER pihole
-
-ENV PATH /opt/pihole:${PATH}
-
-HEALTHCHECK CMD dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1
-
-SHELL ["/bin/bash", "-c"]
+# Copy additional files
+COPY s6/debian-root/etc /etc
+COPY s6/debian-root/usr /usr
